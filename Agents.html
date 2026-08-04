@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3B Agent Reviews — Read-Only</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
+
+  :root {
+    --navy: #0a1628; --navy2: #0f2040; --accent2: #4fa3e8; --green2: #25a868;
+    --red2: #e63946; --amber2: #f59e0b; --purple2: #8b5cf6; --teal2: #06b6d4;
+    --slate: #1e293b; --border: #2a3f5f; --text: #e2e8f0; --text2: #94a3b8;
+    --text3: #64748b; --white: #f8fafc; --card: #0d1f38;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--navy); color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif; font-size: 13px;
+    min-height: 100vh;
+  }
+  header {
+    background: var(--navy2); border-bottom: 1px solid var(--border);
+    padding: 14px 18px; display: flex; justify-content: space-between;
+    align-items: center; flex-wrap: wrap; gap: 10px; position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 15px; color: var(--white); font-weight: 700; }
+  header .sub { font-size: 10px; color: var(--text3); margin-top: 2px; }
+  .btn {
+    background: var(--slate); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 12px; border-radius: 6px; font-size: 11px; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent2); }
+  .banner {
+    background: rgba(79,163,232,0.08); border: 1px solid rgba(79,163,232,0.3);
+    color: var(--text2); font-size: 10px; padding: 8px 18px; line-height: 1.5;
+  }
+  .layout { display: flex; min-height: calc(100vh - 90px); }
+  nav {
+    width: 230px; flex-shrink: 0; border-right: 1px solid var(--border);
+    padding: 10px 0; overflow-y: auto;
+  }
+  nav .nav-item {
+    padding: 9px 16px; font-size: 11.5px; color: var(--text2); cursor: pointer;
+    border-left: 3px solid transparent; display: flex; justify-content: space-between; gap: 6px;
+  }
+  nav .nav-item:hover { background: rgba(255,255,255,0.03); color: var(--white); }
+  nav .nav-item.active { background: rgba(79,163,232,0.08); border-left-color: var(--accent2); color: var(--white); font-weight: 600; }
+  nav .nav-item .count {
+    font-size: 9px; color: var(--text3); background: var(--slate);
+    border-radius: 8px; padding: 1px 6px; align-self: center;
+  }
+  main { flex: 1; padding: 18px 22px; overflow-y: auto; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 12px;
+  }
+  .status-pill {
+    font-size: 9px; font-weight: 700; border-radius: 10px; padding: 3px 9px;
+    display: inline-block;
+  }
+  .meta { font-size: 10px; color: var(--text3); margin-top: 4px; }
+  .narrative {
+    border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;
+    white-space: pre-wrap; font-size: 11.5px; color: var(--text); margin-top: 8px;
+    background: rgba(255,255,255,0.02);
+  }
+  table { border-collapse: collapse; width: 100%; margin-top: 6px; font-size: 11px; }
+  th, td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: var(--slate); color: var(--text2); font-weight: 600; font-size: 10px; }
+  .empty { text-align: center; color: var(--text3); padding: 30px; font-size: 11px; }
+  .section-label { font-size: 10px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.4px; margin: 14px 0 4px; }
+  .loading { text-align: center; padding: 60px; color: var(--text3); }
+  h2 { font-size: 14px; color: var(--white); margin-bottom: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📋 3B Agent Reviews <span style="color:var(--text3);font-weight:400;">— read-only</span></h1>
+    <div class="sub" id="sync-status">Connecting…</div>
+  </div>
+  <button class="btn" onclick="loadState()">↻ Refresh</button>
+</header>
+
+<div class="banner">
+  This is a read-only companion view of Command Center's manager agents. It cannot generate, approve, edit, or send anything — all actions still happen in CC. Data reflects the last time CC saved to Supabase.
+</div>
+
+<div class="layout">
+  <nav id="nav"></nav>
+  <main id="main"><div class="loading">Loading…</div></main>
+</div>
+
+<script>
+// Same Supabase project CC uses — read-only REST calls against tracker_state.
+const SB_URL = 'https://xnsdvdfceflmagfhpycw.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhuc2R2ZGZjZWZsbWFnZmhweWN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0MTk1NjgsImV4cCI6MjA5NDk5NTU2OH0.UzKZQj4BLxPpH_OCwQR8LyDUeP9YlKn5UtXRFUFaYKA';
+
+let APP_STATE = {};
+let ACTIVE_KEY = 'dailyBriefings';
+
+function escapeHTML(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+function fmtDate(iso) { return iso ? new Date(iso).toLocaleString() : ''; }
+function statusColor(status) {
+  if (!status) return 'var(--text3)';
+  const s = String(status).toUpperCase();
+  if (s === 'APPROVED' || s === 'COMPLETED') return 'var(--green2)';
+  if (s === 'PENDING') return 'var(--amber2)';
+  if (s === 'DISMISSED' || s === 'SOURCE_CLEARED') return 'var(--text3)';
+  return 'var(--accent2)';
+}
+
+// Each entry: { key, label, icon, kind }
+// kind 'dict' = object keyed by id/date/month, each value is one review
+// kind 'array' = flat array of case-like items (paired with a *Review status object when present)
+const AGENTS = [
+  { key:'dailyBriefings',              label:'Daily Manager Briefing',        icon:'☀️', kind:'dict' },
+  { key:'weeklyLeadershipReviews',      label:'Weekly Leadership Review',      icon:'📊', kind:'dict' },
+  { key:'accountabilityCases',          label:'Staff Accountability',          icon:'🎯', kind:'array', reviewKey:'accountabilityReview' },
+  { key:'communicationDrafts',          label:'Follow-Up Communication',       icon:'✉️', kind:'array', reviewKey:'communicationReview' },
+  { key:'educationComplianceReviews',   label:'Weekly Education Compliance',   icon:'🤖', kind:'dict' },
+  { key:'coachingPackets',              label:'One-on-One Coaching Packets',   icon:'📝', kind:'dict' },
+  { key:'orientationReadinessReviews',  label:'Orientation Readiness',         icon:'🧭', kind:'dict' },
+  { key:'qualityActionReviews',         label:'Quality Improvement Action',    icon:'✅', kind:'dict' },
+  { key:'appraisalPreparations',        label:'Annual Appraisal Prep',         icon:'🗂️', kind:'dict' },
+  { key:'regulatoryReadinessReviews',   label:'Regulatory & Audit Readiness',  icon:'📁', kind:'dict' },
+  { key:'executiveLeadershipReports',   label:'Executive Leadership Report',   icon:'📈', kind:'dict' },
+  { key:'epicReviews',                  label:'Epic Performance Comparison',   icon:'💊', kind:'dict' },
+  { key:'attendanceReviews',            label:'Attendance Integrity',          icon:'🕒', kind:'dict' },
+  { key:'auditTrail',                   label:'Cross-Agent Audit Trail',       icon:'🧾', kind:'audit' },
+];
+
+async function loadState() {
+  const statusEl = document.getElementById('sync-status');
+  statusEl.textContent = 'Loading…';
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/tracker_state?key=eq.app_state&select=value,updated_at`, {
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const rows = await r.json();
+    if (!rows.length) throw new Error('No app_state row found');
+    APP_STATE = JSON.parse(rows[0].value);
+    statusEl.textContent = 'Last synced by CC: ' + fmtDate(rows[0].updated_at);
+    renderNav();
+    renderAgent(ACTIVE_KEY);
+  } catch (e) {
+    statusEl.textContent = '⚠ Could not load — ' + e.message;
+    document.getElementById('main').innerHTML = `<div class="empty">Could not reach Supabase.<br>${escapeHTML(e.message)}</div>`;
+  }
+}
+
+function countFor(agent) {
+  if (agent.kind === 'dict') return Object.keys(APP_STATE[agent.key] || {}).length;
+  if (agent.kind === 'array') return (APP_STATE[agent.key] || []).filter(c => c.active !== false).length;
+  if (agent.kind === 'audit') return (APP_STATE[agent.key] || []).length;
+  return 0;
+}
+
+function renderNav() {
+  const nav = document.getElementById('nav');
+  nav.innerHTML = AGENTS.map(a => `
+    <div class="nav-item ${a.key===ACTIVE_KEY?'active':''}" onclick="selectAgent('${a.key}')">
+      <span>${a.icon} ${a.label}</span>
+      <span class="count">${countFor(a)}</span>
+    </div>
+  `).join('');
+}
+
+function selectAgent(key) {
+  ACTIVE_KEY = key;
+  renderNav();
+  renderAgent(key);
+}
+
+function renderReviewHeader(review) {
+  if (!review) return '';
+  const color = statusColor(review.status);
+  return `<div class="card" style="border-left:3px solid ${color};">
+    <span class="status-pill" style="color:${color};border:1px solid ${color};">${escapeHTML(review.status||'DRAFT')}</span>
+    <div class="meta">
+      ${review.generatedAt ? 'Generated ' + fmtDate(review.generatedAt) : ''}
+      ${review.approvedAt ? ' · Approved ' + fmtDate(review.approvedAt) : ''}
+      ${review.approvedBy ? ' by ' + escapeHTML(review.approvedBy) : ''}
+    </div>
+  </div>`;
+}
+
+// Generic key/value + narrative renderer for a single review object —
+// pulls out common narrative-style fields first, then lists whatever
+// else is left as a compact table, so every agent gets a reasonable
+// display without needing a bespoke layout per type.
+const NARRATIVE_FIELDS = ['managerSummary','winsNarrative','risksNarrative','leadershipSupport','nextMonthFocus','managerPreparation','employeePerspective','agreedActions'];
+const SKIP_FIELDS = ['status','generatedAt','approvedAt','approvedBy','signature','sourceId','sourceAt'];
+
+function renderReviewBody(obj) {
+  if (!obj || typeof obj !== 'object') return '<div class="empty">No data.</div>';
+  let html = '';
+  NARRATIVE_FIELDS.forEach(f => {
+    if (obj[f]) html += `<div class="section-label">${f.replace(/([A-Z])/g,' $1')}</div><div class="narrative">${escapeHTML(obj[f])}</div>`;
+  });
+  // Any array field on the object becomes a table.
+  Object.keys(obj).forEach(f => {
+    if (Array.isArray(obj[f]) && obj[f].length && typeof obj[f][0] === 'object') {
+      const cols = Object.keys(obj[f][0]).filter(c => !['id'].includes(c));
+      html += `<div class="section-label">${f.replace(/([A-Z])/g,' $1')} (${obj[f].length})</div>`;
+      html += `<table><thead><tr>${cols.map(c=>`<th>${c.replace(/([A-Z])/g,' $1')}</th>`).join('')}</tr></thead><tbody>`;
+      html += obj[f].map(row => `<tr>${cols.map(c=>`<td>${escapeHTML(row[c])}</td>`).join('')}</tr>`).join('');
+      html += `</tbody></table>`;
+    }
+  });
+  // Remaining simple scalar fields not already shown.
+  const shown = new Set([...NARRATIVE_FIELDS, ...SKIP_FIELDS]);
+  Object.keys(obj).forEach(f => {
+    if (shown.has(f) || Array.isArray(obj[f]) || typeof obj[f] === 'object') return;
+    if (obj[f] === '' || obj[f] == null) return;
+    html += `<div class="meta"><b style="color:var(--text2);">${f.replace(/([A-Z])/g,' $1')}:</b> ${escapeHTML(obj[f])}</div>`;
+  });
+  return html || '<div class="empty">No content recorded yet.</div>';
+}
+
+function renderAgent(key) {
+  const agent = AGENTS.find(a => a.key === key);
+  const main = document.getElementById('main');
+  if (!agent) { main.innerHTML = '<div class="empty">Unknown agent</div>'; return; }
+
+  if (agent.kind === 'audit') {
+    const entries = (APP_STATE[key] || []).slice().reverse().slice(0, 200);
+    main.innerHTML = `<h2>${agent.icon} ${agent.label}</h2>
+      <div class="meta" style="margin-bottom:10px;">Most recent 200 entries across all agents</div>` +
+      (entries.length ? `<table><thead><tr><th>When</th><th>Action</th><th>Detail</th><th>By</th></tr></thead><tbody>${
+        entries.map(e => `<tr><td>${fmtDate(e.at||e.timestamp)}</td><td>${escapeHTML(e.action||e.label)}</td><td>${escapeHTML(e.detail)}</td><td>${escapeHTML(e.by||e.actor||'')}</td></tr>`).join('')
+      }</tbody></table>` : '<div class="empty">No audit entries recorded.</div>');
+    return;
+  }
+
+  if (agent.kind === 'array') {
+    const items = (APP_STATE[key] || []).filter(c => c.active !== false);
+    const review = APP_STATE[agent.reviewKey];
+    let html = `<h2>${agent.icon} ${agent.label}</h2>`;
+    html += renderReviewHeader(review);
+    if (!items.length) {
+      html += '<div class="empty">No active items.</div>';
+    } else {
+      const cols = Object.keys(items[0]).filter(c => !['id','active'].includes(c));
+      html += `<table><thead><tr>${cols.map(c=>`<th>${c.replace(/([A-Z])/g,' $1')}</th>`).join('')}</tr></thead><tbody>`;
+      html += items.map(row => `<tr>${cols.map(c=>`<td>${escapeHTML(row[c])}</td>`).join('')}</tr>`).join('');
+      html += `</tbody></table>`;
+    }
+    main.innerHTML = html;
+    return;
+  }
+
+  // kind === 'dict' — object keyed by date/month/staff, each value a review
+  const dict = APP_STATE[key] || {};
+  const dictKeys = Object.keys(dict).sort().reverse();
+  if (!dictKeys.length) {
+    main.innerHTML = `<h2>${agent.icon} ${agent.label}</h2><div class="empty">Nothing generated yet in CC.</div>`;
+    return;
+  }
+  let html = `<h2>${agent.icon} ${agent.label}</h2>`;
+  html += `<div class="meta" style="margin-bottom:10px;">${dictKeys.length} record(s) — most recent first</div>`;
+  dictKeys.forEach(k => {
+    const rec = dict[k];
+    html += `<div class="section-label" style="margin-top:16px;">${escapeHTML(k)}</div>`;
+    html += renderReviewHeader(rec);
+    html += `<div class="card" style="margin-top:-6px;">${renderReviewBody(rec)}</div>`;
+  });
+  main.innerHTML = html;
+}
+
+loadState();
+</script>
+</body>
+</html>
